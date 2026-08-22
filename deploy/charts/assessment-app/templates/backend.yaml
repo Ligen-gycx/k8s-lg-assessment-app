@@ -15,6 +15,14 @@ spec:
       {{- with .Values.backend.nodeSelector }}
       nodeSelector: {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- if .Values.backend.podAntiAffinity }}
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels: { app: assessment-api }
+              topologyKey: kubernetes.io/hostname
+      {{- end }}
       securityContext: { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, fsGroup: 10001 }
       containers:
         - name: api
@@ -28,6 +36,12 @@ spec:
               value: {{ .Values.database.username | quote }}
             - name: DATABASE_PASSWORD
               valueFrom: { secretKeyRef: { name: {{ .Values.database.existingSecret }}, key: {{ .Values.database.passwordKey }} } }
+            - name: POD_NAME
+              valueFrom: { fieldRef: { fieldPath: metadata.name } }
+            - name: NODE_NAME
+              valueFrom: { fieldRef: { fieldPath: spec.nodeName } }
+            - name: POD_IP
+              valueFrom: { fieldRef: { fieldPath: status.podIP } }
           resources: {{- toYaml .Values.resources.backend | nindent 12 }}
           volumeMounts: [{ name: tmp, mountPath: /tmp }]
           startupProbe: { httpGet: { path: /actuator/health/readiness, port: http }, periodSeconds: 5, failureThreshold: 30 }

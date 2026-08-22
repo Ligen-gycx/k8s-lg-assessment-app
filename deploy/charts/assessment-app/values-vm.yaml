@@ -8,8 +8,8 @@ frontend:
 backend:
   image: docker.io/library/assessment-api
   tag: 4668d89
-  replicas: 1
-  nodeSelector:
-    kubernetes.io/hostname: k8s-lg-node1
+  replicas: 2
+  nodeSelector: {}
+  podAntiAffinity: true
 ingress:
   host: app.192.168.2.6.nip.io

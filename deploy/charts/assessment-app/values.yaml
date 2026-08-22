@@ -10,6 +10,7 @@ backend:
   pullPolicy: IfNotPresent
   replicas: 2
   nodeSelector: {}
+  podAntiAffinity: false
 database:
   host: postgresql
   name: assessment
