@@ -208,6 +208,28 @@ curl -H 'Host: app.192.168.2.6.nip.io' \
 - 前端生产构建 `npm run build`、后端容器构建、Kubernetes 滚动发布均已通过。
 - 代码提交 `4668d89`（功能更新）和 `498e9aa`（部署配置）已推送至 GitHub `main` 分支。
 
+### 3.9 后端双副本负载均衡与节点可视化
+
+为演示 Kubernetes Service 对同一后端服务的多实例流量分配，将 `assessment-api` 扩展为两个副本。该调整只扩展无状态 Spring Boot API；Traefik 和 PostgreSQL 保持单副本，因此本次验证是服务级负载均衡，不代表完整高可用。
+
+#### 实施步骤
+
+1. 新增 `GET /api/runtime`，返回当前响应实例的 `podName`、`nodeName` 和 `podIp`。
+2. 后端 Deployment 使用 Downward API 注入 `POD_NAME`、`NODE_NAME`、`POD_IP`，应用不需要 Kubernetes API 权限即可读取自身运行位置。
+3. VM 环境将 API 副本调整为 `2`，移除固定 nodeSelector，并使用主机名级 `podAntiAffinity`，保证两个 API Pod 不会调度到同一节点。
+4. 为避免旧版本 API 占用 node1 导致反亲和规则与默认滚动更新互相等待，Deployment 设置 `maxSurge: 0`、`maxUnavailable: 1`；升级时可先终止旧实例，再在 node1 创建新实例。
+5. 前端刷新按钮改为“刷新数据与节点”：每次请求同时刷新任务、调用 `/api/runtime`，显示当前响应节点和最近 6 次采样实例。
+
+#### 集群与入口验证
+
+- Helm Release 已升级至 Revision `7`，状态为 `deployed`。
+- 两个新 API Pod 均为 `1/1 Running`：`assessment-api-9b87f4d76-s89gv` 位于 `k8s-lg-node1`（`10.244.107.74`），`assessment-api-9b87f4d76-sbhdp` 位于 `k8s-lg-node2`（`10.244.201.200`）。
+- `assessment-api` 的 EndpointSlice 同时包含 `10.244.107.74:8080` 和 `10.244.201.200:8080`。
+- 经业务入口连续请求 `http://192.168.2.6:30080/api/runtime`，返回结果同时出现 node1 与 node2 的 Pod 信息，证明流量可由 Service 分配到两个后端副本。
+- 页面连续点击刷新后，当前响应显示为 node2，最近采样同时出现 `node1` 与 `node2`。Kubernetes Service 按连接分配流量，不承诺每次刷新严格轮换，因此采样中可以连续命中同一节点。
+
+![后端双副本负载均衡页面验证](evidence/06-backend-load-balancing.png)
+
 ## 4. 已实现的应用代码
 
 - `frontend/`：React/Vite 中文任务看板，模拟美团天数池业务场景，已通过 `npm run build`。
