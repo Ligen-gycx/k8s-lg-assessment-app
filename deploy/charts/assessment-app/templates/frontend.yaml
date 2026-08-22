@@ -52,3 +52,9 @@ spec:
           - path: /
             pathType: Prefix
             backend: { service: { name: assessment-web, port: { name: http } } }
+    # VM lab fallback: supports direct private-IP access when a browser proxy bypasses nip.io.
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: { service: { name: assessment-web, port: { name: http } } }

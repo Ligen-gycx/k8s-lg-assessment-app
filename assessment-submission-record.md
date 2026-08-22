@@ -153,7 +153,7 @@ curl -H 'Host: jenkins.192.168.2.6.nip.io' \
 
 - Spring Boot 首次启动包含连接池初始化与 Flyway 迁移，约需 60 秒；Chart 使用 `startupProbe` 提供最多 150 秒的启动窗口，避免 livenessProbe 过早重启容器。
 - Flyway 已创建 `flyway_schema_history` 并执行 `V1__create_tasks.sql`，初始化任务数据可由 API 返回。
-- 业务入口：`http://app.192.168.2.6.nip.io:30080/`。
+- 业务入口：`http://app.192.168.2.6.nip.io:30080/`；为避免本机代理对 `nip.io` 的拦截，同时提供私网直连入口：`http://192.168.2.6:30080/`。
 - 验收时经 Traefik -> Nginx -> Spring Boot 创建 `Phase 3 deployment verified` 任务；随后通过 `GET /api/tasks` 读取，并在 PostgreSQL `tasks` 表中确认同一条记录存在。
 
 验收命令：
