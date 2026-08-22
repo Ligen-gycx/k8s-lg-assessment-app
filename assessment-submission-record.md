@@ -5,7 +5,7 @@
 
 ## 1. 作业目标
 
-使用本机 Multipass 创建三台 Ubuntu 虚拟机，搭建 Kubernetes 集群，并建立 Java 全栈应用的基础交付链路。当前已完成基础设施、Kubernetes 网络、NFS 持久化 PostgreSQL、GitHub SSH 授权与项目代码入库。
+使用本机 Multipass 创建三台 Ubuntu 虚拟机，搭建 Kubernetes 集群，并建立 Java 全栈应用的基础交付链路。当前已完成基础设施、Kubernetes 网络、NFS 持久化 PostgreSQL、GitHub SSH 授权、代码入库和第二阶段平台部署。
 
 ## 2. 当前架构
 
@@ -18,6 +18,9 @@
 | Pod 网络 | Calico `v3.31.3`，`10.244.0.0/16`，VXLAN，IPIP/BGP 关闭 |
 | 持久化 | 控制平面 NFS Server，静态 NFS PV/PVC |
 | 数据库 | PostgreSQL 17 StatefulSet，`assessment` 命名空间 |
+| Ingress | Traefik v3.3，部署于 `k8s-lg-node2`，NodePort `30080` |
+| CI | Jenkins LTS JDK 17，部署于 `k8s-lg-node1`，6Gi NFS PVC |
+| 构建服务 | Rootless BuildKit v0.17.3，部署于 `k8s-lg-node1` |
 | 代码 | React/Vite 前端、Spring Boot 3/Java 21 后端、PostgreSQL/Flyway、Helm Chart、Jenkinsfile |
 
 ## 3. 已完成步骤
@@ -95,6 +98,47 @@ git@github.com:Ligen-gycx/k8s-lg-assessment-app.git
 
 ![GitHub main 分支验证](evidence/04-github.png)
 
+### 3.6 第二阶段：部署入口、CI 与构建平台
+
+本阶段使用三个可复现清单：`platform/traefik.yaml`、`platform/jenkins.yaml`、`platform/buildkit.yaml`。所有服务使用 ARM64 可运行镜像，并按低资源集群限制固定调度到工作节点。
+
+#### Traefik 统一入口
+
+- Traefik v3.3 固定调度到 `k8s-lg-node2`，资源请求为 `50m CPU / 64Mi`，限制为 `250m CPU / 128Mi`。
+- 使用 `traefik` IngressClass 和 NodePort `30080` 提供 HTTP 入口。
+- ServiceAccount 只拥有读取 Service、Endpoint、EndpointSlice、Secret、Node 和 Ingress 的权限。
+- Jenkins 已通过 `jenkins.192.168.2.6.nip.io` 路由接入该入口：`http://jenkins.192.168.2.6.nip.io:30080/`。
+
+#### Jenkins 与 NFS 持久化
+
+- Jenkins LTS JDK 17 固定调度到 `k8s-lg-node1`，资源请求为 `250m CPU / 512Mi`，限制为 `1 CPU / 1Gi`。
+- `jenkins-home` PVC 已绑定到 6Gi 静态 NFS PV，重建 Pod 后 Jenkins 配置可保留。
+- 创建 `assessment/jenkins-deployer` ServiceAccount，其 Role 仅允许对应用所需的 Deployment、ReplicaSet、Service、ConfigMap 和 Ingress 做读取、创建、更新和 patch，不授予 Secret 删除或集群级权限。
+
+#### Rootless BuildKit
+
+- Rootless BuildKit v0.17.3 固定调度到 `k8s-lg-node1`，以 UID/GID `1000` 运行，不使用 privileged 容器、不挂载 Docker Socket。
+- BuildKit 的 `newuidmap` 仅用于 RootlessKit 创建用户命名空间；该能力是 rootless 构建所必需，其他容器权限保持受限。
+- 已使用 `buildctl debug workers` 验证可返回 `linux/arm64` worker。
+
+验收命令：
+
+```bash
+kubectl get nodes
+kubectl get pods -A
+kubectl -n ci get pvc jenkins-home
+kubectl auth can-i patch deployments \
+  --as=system:serviceaccount:assessment:jenkins-deployer -n assessment
+kubectl auth can-i delete secrets \
+  --as=system:serviceaccount:assessment:jenkins-deployer -n assessment
+kubectl -n build exec deployment/buildkitd -- \
+  buildctl --addr tcp://127.0.0.1:1234 debug workers
+curl -H 'Host: jenkins.192.168.2.6.nip.io' \
+  http://192.168.2.6:30080/
+```
+
+验收结果：三个 Node 均为 `Ready`；Traefik、Jenkins、BuildKit 与 PostgreSQL 均为 `Running`；`jenkins-home` PVC 为 `Bound`；RBAC 检查结果为 `patch deployments=yes`、`delete secrets=no`；BuildKit 返回 ARM64 worker；经 Traefik 访问 Jenkins 返回 `403`，这是 Jenkins 未登录状态下的预期响应，证明入口已成功代理到 Jenkins。
+
 ## 4. 已实现的应用代码
 
 - `frontend/`：React/Vite 任务看板，已通过 `npm run build`。
@@ -107,11 +151,9 @@ git@github.com:Ligen-gycx/k8s-lg-assessment-app.git
 
 ## 5. 后续实施项
 
-1. 部署 Traefik Ingress，提供统一 HTTP/HTTPS 入口。
-2. 部署 Jenkins Controller、NFS PVC 与最小权限 ServiceAccount。
-3. 配置 Rootless BuildKit、GHCR 凭据与镜像推送。
-4. 完成 Jenkins 中的 Maven 测试、镜像构建、Helm 发布及回滚验证。
-5. 验证浏览器到数据库的完整请求链路：浏览器 → Ingress → React → Spring Boot → PostgreSQL。
+1. 在 Jenkins 中安装所需插件并配置 GitHub、GHCR 与 Kubernetes 凭据。
+2. 完成 Jenkins 中的 Maven 测试、镜像构建、GHCR 推送、Helm 发布及回滚验证。
+3. 部署前端和后端 Helm Release，验证浏览器到数据库的完整请求链路：浏览器 → Ingress → React → Spring Boot → PostgreSQL。
 
 ## 6. 证据说明
 

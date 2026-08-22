@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: Namespace
+metadata: { name: build }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: buildkitd, namespace: build }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: buildkitd } }
+  template:
+    metadata: { labels: { app: buildkitd } }
+    spec:
+      nodeSelector: { kubernetes.io/hostname: k8s-lg-node1 }
+      containers:
+        - name: buildkitd
+          image: docker.m.daocloud.io/moby/buildkit:v0.17.3-rootless
+          args: [--addr=tcp://0.0.0.0:1234, --oci-worker-no-process-sandbox]
+          ports: [{ name: buildkit, containerPort: 1234 }]
+          env: [{ name: BUILDKITD_FLAGS, value: --oci-worker-no-process-sandbox }]
+          resources: { requests: { cpu: 100m, memory: 256Mi }, limits: { cpu: "1", memory: 1Gi } }
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            runAsNonRoot: true
+            # RootlessKit invokes the image's setuid newuidmap helper to create its user namespace.
+            allowPrivilegeEscalation: true
+            seccompProfile: { type: Unconfined }
+            appArmorProfile: { type: Unconfined }
+          volumeMounts: [{ name: cache, mountPath: /home/user/.local/share/buildkit }]
+      volumes: [{ name: cache, emptyDir: {} }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: buildkitd, namespace: build }
+spec:
+  selector: { app: buildkitd }
+  ports: [{ name: buildkit, port: 1234, targetPort: buildkit }]

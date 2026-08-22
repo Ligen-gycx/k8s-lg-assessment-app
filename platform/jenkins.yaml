@@ -1,0 +1,92 @@
+apiVersion: v1
+kind: Namespace
+metadata: { name: ci }
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata: { name: jenkins-home-pv }
+spec:
+  capacity: { storage: 6Gi }
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs-static
+  nfs: { server: 192.168.2.4, path: /srv/k8s-nfs/jenkins }
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: { name: jenkins-home, namespace: ci }
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: nfs-static
+  resources: { requests: { storage: 6Gi } }
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata: { name: jenkins-deployer, namespace: assessment }
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: { name: assessment-deployer, namespace: assessment }
+rules:
+  - apiGroups: [apps]
+    resources: [deployments, replicasets]
+    verbs: [get, list, watch, create, update, patch]
+  - apiGroups: [""]
+    resources: [services, configmaps]
+    verbs: [get, list, watch, create, update, patch]
+  - apiGroups: [networking.k8s.io]
+    resources: [ingresses]
+    verbs: [get, list, watch, create, update, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: { name: jenkins-deployer, namespace: assessment }
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: assessment-deployer }
+subjects: [{ kind: ServiceAccount, name: jenkins-deployer, namespace: assessment }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: jenkins, namespace: ci }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: jenkins } }
+  template:
+    metadata: { labels: { app: jenkins } }
+    spec:
+      nodeSelector: { kubernetes.io/hostname: k8s-lg-node1 }
+      securityContext: { fsGroup: 1000 }
+      containers:
+        - name: jenkins
+          image: docker.m.daocloud.io/jenkins/jenkins:2.479.3-lts-jdk17
+          ports: [{ name: http, containerPort: 8080 }, { name: agent, containerPort: 50000 }]
+          volumeMounts: [{ name: home, mountPath: /var/jenkins_home }]
+          resources: { requests: { cpu: 250m, memory: 512Mi }, limits: { cpu: "1", memory: 1Gi } }
+          readinessProbe: { httpGet: { path: /login, port: http }, initialDelaySeconds: 35, timeoutSeconds: 5 }
+          livenessProbe: { httpGet: { path: /login, port: http }, initialDelaySeconds: 90, timeoutSeconds: 5 }
+      volumes: [{ name: home, persistentVolumeClaim: { claimName: jenkins-home } }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: jenkins, namespace: ci }
+spec:
+  selector: { app: jenkins }
+  ports:
+    - { name: http, port: 8080, targetPort: http }
+    - { name: agent, port: 50000, targetPort: agent }
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata: { name: jenkins, namespace: ci }
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: jenkins.192.168.2.6.nip.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: jenkins
+                port: { number: 8080 }
