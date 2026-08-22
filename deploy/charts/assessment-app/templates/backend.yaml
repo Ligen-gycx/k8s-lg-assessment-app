@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: assessment-api
+  labels: {{- include "assessment.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.backend.replicas }}
+  selector:
+    matchLabels: { app: assessment-api }
+  template:
+    metadata:
+      labels: { app: assessment-api }
+    spec:
+      automountServiceAccountToken: false
+      securityContext: { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, fsGroup: 10001 }
+      containers:
+        - name: api
+          image: "{{ .Values.backend.image }}:{{ .Values.backend.tag }}"
+          ports: [{ name: http, containerPort: 8080 }]
+          env:
+            - name: DATABASE_URL
+              value: "jdbc:postgresql://{{ .Values.database.host }}:5432/{{ .Values.database.name }}"
+            - name: DATABASE_USERNAME
+              value: {{ .Values.database.username | quote }}
+            - name: DATABASE_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ .Values.database.existingSecret }}, key: {{ .Values.database.passwordKey }} } }
+          resources: {{- toYaml .Values.resources.backend | nindent 12 }}
+          readinessProbe: { httpGet: { path: /actuator/health/readiness, port: http }, initialDelaySeconds: 10 }
+          livenessProbe: { httpGet: { path: /actuator/health/liveness, port: http }, initialDelaySeconds: 25 }
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: assessment-api }
+spec:
+  selector: { app: assessment-api }
+  ports: [{ name: http, port: 8080, targetPort: http }]
+

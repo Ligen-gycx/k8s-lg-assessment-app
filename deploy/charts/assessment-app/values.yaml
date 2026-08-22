@@ -1,0 +1,24 @@
+frontend:
+  image: ghcr.io/ligen-gycx/k8s-lg-assessment-frontend
+  tag: latest
+backend:
+  image: ghcr.io/ligen-gycx/k8s-lg-assessment-backend
+  tag: latest
+  replicas: 2
+database:
+  host: postgresql
+  name: assessment
+  username: assessment
+  existingSecret: assessment-db
+  passwordKey: password
+ingress:
+  className: traefik
+  host: app.k8s.local
+resources:
+  frontend:
+    requests: { cpu: 25m, memory: 64Mi }
+    limits: { cpu: 200m, memory: 128Mi }
+  backend:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+

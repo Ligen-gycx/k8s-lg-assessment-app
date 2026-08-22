@@ -1,0 +1,21 @@
+spring:
+  application:
+    name: assessment-api
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/assessment}
+    username: ${DATABASE_USERNAME:assessment}
+    password: ${DATABASE_PASSWORD:assessment}
+  flyway:
+    enabled: true
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+server:
+  shutdown: graceful
+
