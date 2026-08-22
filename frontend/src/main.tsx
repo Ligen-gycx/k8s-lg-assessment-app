@@ -5,6 +5,12 @@ import './styles.css';
 
 type Task = { id: number; title: string; description: string; status: 'TODO' | 'IN_PROGRESS' | 'DONE'; createdAt: string };
 
+const statusText = {
+  TODO: '待处理',
+  IN_PROGRESS: '进行中',
+  DONE: '已完成',
+} as const;
+
 function App() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [title, setTitle] = useState('');
@@ -19,11 +25,10 @@ function App() {
     setTitle(''); setDescription(''); await load();
   };
   return <main>
-    <header><div className="brand"><Server size={22}/><span>LG Assessment</span></div><button className="icon" onClick={() => void load()} aria-label="刷新"><RefreshCw size={18}/></button></header>
-    <section className="intro"><p className="eyebrow">KUBERNETES DELIVERY BOARD</p><h1>Full-stack delivery</h1><p>Track the assessment from source code to a running service.</p></section>
-    <section className="board"><form onSubmit={add}><h2>Create task</h2><input value={title} onChange={e => setTitle(e.target.value)} maxLength={120} placeholder="Task title"/><textarea value={description} onChange={e => setDescription(e.target.value)} maxLength={1000} placeholder="Description (optional)"/><button className="primary"><Plus size={18}/> Add task</button></form>
-    <div className="tasks"><div className="section-head"><h2>Tasks</h2><span>{tasks.length}</span></div>{loading ? <p className="muted">Loading tasks...</p> : tasks.map(task => <article key={task.id}><div><h3>{task.title}</h3><p>{task.description || 'No description'}</p></div><span className={'status ' + task.status.toLowerCase()}>{task.status.replace('_', ' ')}</span></article>)}</div></section>
+    <header><div className="brand"><Server size={22}/><span>美团天数池</span></div><button className="icon" onClick={() => void load()} aria-label="刷新任务"><RefreshCw size={18}/></button></header>
+    <section className="intro"><p className="eyebrow">MEITUAN DAYS POOL</p><h1>天数池项目看板</h1><p>模拟会员天数权益从活动投放到运营监控的交付过程。</p></section>
+    <section className="board"><form onSubmit={add}><h2>新建任务</h2><input value={title} onChange={e => setTitle(e.target.value)} maxLength={120} placeholder="请输入任务名称"/><textarea value={description} onChange={e => setDescription(e.target.value)} maxLength={1000} placeholder="请输入任务说明（可选）"/><button className="primary"><Plus size={18}/> 添加任务</button></form>
+    <div className="tasks"><div className="section-head"><h2>任务列表</h2><span>{tasks.length}</span></div>{loading ? <p className="muted">正在加载任务...</p> : tasks.map(task => <article key={task.id}><div><h3>{task.title}</h3><p>{task.description || '暂无任务说明'}</p></div><span className={'status ' + task.status.toLowerCase()}>{statusText[task.status]}</span></article>)}</div></section>
   </main>;
 }
 createRoot(document.getElementById('root')!).render(<App />);
-
