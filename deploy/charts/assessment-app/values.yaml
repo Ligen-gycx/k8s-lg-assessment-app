@@ -1,10 +1,15 @@
 frontend:
   image: ghcr.io/ligen-gycx/k8s-lg-assessment-frontend
   tag: latest
+  pullPolicy: IfNotPresent
+  replicas: 2
+  nodeSelector: {}
 backend:
   image: ghcr.io/ligen-gycx/k8s-lg-assessment-backend
   tag: latest
+  pullPolicy: IfNotPresent
   replicas: 2
+  nodeSelector: {}
 database:
   host: postgresql
   name: assessment
@@ -21,4 +26,3 @@ resources:
   backend:
     requests: { cpu: 100m, memory: 256Mi }
     limits: { cpu: 500m, memory: 512Mi }
-

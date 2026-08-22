@@ -12,10 +12,14 @@ spec:
       labels: { app: assessment-api }
     spec:
       automountServiceAccountToken: false
+      {{- with .Values.backend.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
       securityContext: { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, fsGroup: 10001 }
       containers:
         - name: api
           image: "{{ .Values.backend.image }}:{{ .Values.backend.tag }}"
+          imagePullPolicy: {{ .Values.backend.pullPolicy }}
           ports: [{ name: http, containerPort: 8080 }]
           env:
             - name: DATABASE_URL
@@ -25,9 +29,12 @@ spec:
             - name: DATABASE_PASSWORD
               valueFrom: { secretKeyRef: { name: {{ .Values.database.existingSecret }}, key: {{ .Values.database.passwordKey }} } }
           resources: {{- toYaml .Values.resources.backend | nindent 12 }}
-          readinessProbe: { httpGet: { path: /actuator/health/readiness, port: http }, initialDelaySeconds: 10 }
-          livenessProbe: { httpGet: { path: /actuator/health/liveness, port: http }, initialDelaySeconds: 25 }
+          volumeMounts: [{ name: tmp, mountPath: /tmp }]
+          startupProbe: { httpGet: { path: /actuator/health/readiness, port: http }, periodSeconds: 5, failureThreshold: 30 }
+          readinessProbe: { httpGet: { path: /actuator/health/readiness, port: http } }
+          livenessProbe: { httpGet: { path: /actuator/health/liveness, port: http } }
           securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+      volumes: [{ name: tmp, emptyDir: {} }]
 ---
 apiVersion: v1
 kind: Service
@@ -35,4 +42,3 @@ metadata: { name: assessment-api }
 spec:
   selector: { app: assessment-api }
   ports: [{ name: http, port: 8080, targetPort: http }]
-
