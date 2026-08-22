@@ -1,0 +1,53 @@
+apiVersion: v1
+kind: Namespace
+metadata: { name: assessment }
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata: { name: assessment-postgresql-pv }
+spec:
+  capacity: { storage: 4Gi }
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs-static
+  nfs: { server: 192.168.2.4, path: /srv/k8s-nfs/postgresql }
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: { name: postgresql-data, namespace: assessment }
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: nfs-static
+  resources: { requests: { storage: 4Gi } }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: { name: postgresql, namespace: assessment }
+spec:
+  serviceName: postgresql
+  replicas: 1
+  selector: { matchLabels: { app: postgresql } }
+  template:
+    metadata: { labels: { app: postgresql } }
+    spec:
+      securityContext: { fsGroup: 999 }
+      containers:
+        - name: postgresql
+          image: docker.m.daocloud.io/library/postgres:17-bookworm
+          ports: [{ name: postgres, containerPort: 5432 }]
+          env:
+            - { name: POSTGRES_DB, value: assessment }
+            - { name: POSTGRES_USER, value: assessment }
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: assessment-db, key: password } }
+          volumeMounts: [{ name: data, mountPath: /var/lib/postgresql/data }]
+          resources: { requests: { cpu: 100m, memory: 256Mi }, limits: { cpu: 500m, memory: 512Mi } }
+          readinessProbe: { exec: { command: [sh, -c, pg_isready -U assessment -d assessment] }, initialDelaySeconds: 10 }
+      volumes: [{ name: data, persistentVolumeClaim: { claimName: postgresql-data } }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: postgresql, namespace: assessment }
+spec:
+  selector: { app: postgresql }
+  ports: [{ name: postgres, port: 5432, targetPort: postgres }]
