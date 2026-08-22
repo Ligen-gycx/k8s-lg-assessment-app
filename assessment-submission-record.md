@@ -5,7 +5,7 @@
 
 ## 1. 作业目标
 
-使用本机 Multipass 创建三台 Ubuntu 虚拟机，搭建 Kubernetes 集群，并建立 Java 全栈应用的基础交付链路。当前已完成基础设施、Kubernetes 网络、NFS 持久化 PostgreSQL、GitHub SSH 授权、代码入库和第二阶段平台部署。
+使用本机 Multipass 创建三台 Ubuntu 虚拟机，搭建 Kubernetes 集群，并建立 Java 全栈应用的基础交付链路。当前已完成基础设施、Kubernetes 网络、NFS 持久化 PostgreSQL、GitHub SSH 授权、代码入库、第二阶段平台部署，以及第三阶段应用 Helm 发布和端到端数据验收。
 
 ## 2. 当前架构
 
@@ -139,6 +139,36 @@ curl -H 'Host: jenkins.192.168.2.6.nip.io' \
 
 验收结果：三个 Node 均为 `Ready`；Traefik、Jenkins、BuildKit 与 PostgreSQL 均为 `Running`；`jenkins-home` PVC 为 `Bound`；RBAC 检查结果为 `patch deployments=yes`、`delete secrets=no`；BuildKit 返回 ARM64 worker；经 Traefik 访问 Jenkins 返回 `403`，这是 Jenkins 未登录状态下的预期响应，证明入口已成功代理到 Jenkins。
 
+### 3.7 第三阶段：应用发布与端到端验收
+
+#### 镜像与 Helm 发布
+
+- 将 Dockerfile 基础镜像切换到可访问的 DaoCloud 镜像代理；后端使用 Maven 公共镜像完成依赖下载。
+- 为 Flyway 11 显式加入 `flyway-database-postgresql` 模块，使 Spring Boot 可识别 PostgreSQL 17。
+- 前端与后端均构建为 ARM64 镜像；本次 VM 验证以提交 `60b3f35` 作为镜像标签。
+- 镜像导入到对应工作节点的 containerd：API 固定在 `k8s-lg-node1`，Web 固定在 `k8s-lg-node2`，使用 `imagePullPolicy: IfNotPresent`，无需在本阶段暴露或保存 GHCR 凭据。
+- 使用 Helm `assessment-app` Release 发布到 `assessment` 命名空间；当前为 Revision `3`、状态 `deployed`。
+
+#### 稳定性与数据验证
+
+- Spring Boot 首次启动包含连接池初始化与 Flyway 迁移，约需 60 秒；Chart 使用 `startupProbe` 提供最多 150 秒的启动窗口，避免 livenessProbe 过早重启容器。
+- Flyway 已创建 `flyway_schema_history` 并执行 `V1__create_tasks.sql`，初始化任务数据可由 API 返回。
+- 业务入口：`http://app.192.168.2.6.nip.io:30080/`。
+- 验收时经 Traefik -> Nginx -> Spring Boot 创建 `Phase 3 deployment verified` 任务；随后通过 `GET /api/tasks` 读取，并在 PostgreSQL `tasks` 表中确认同一条记录存在。
+
+验收命令：
+
+```bash
+kubectl -n assessment get deploy,pods,svc,ingress
+helm -n assessment status assessment-app
+curl -H 'Host: app.192.168.2.6.nip.io' \
+  http://192.168.2.6:30080/
+curl -H 'Host: app.192.168.2.6.nip.io' \
+  http://192.168.2.6:30080/api/tasks
+```
+
+验收结果：`assessment-api`、`assessment-web`、`postgresql-0` 均为 `1/1 Running`；业务页面返回 `200 OK`；任务创建、列表读取和 PostgreSQL 持久化数据一致。
+
 ## 4. 已实现的应用代码
 
 - `frontend/`：React/Vite 任务看板，已通过 `npm run build`。
@@ -147,13 +177,13 @@ curl -H 'Host: jenkins.192.168.2.6.nip.io' \
 - `frontend/Dockerfile` 与 `backend/Dockerfile`：前后端容器化，其中后端以非 root 用户运行。
 - `deploy/charts/assessment-app/`：前端、后端 Deployment/Service/Ingress 的 Helm Chart 模板。
 - `platform/postgresql.yaml`：不含密码的 PostgreSQL/NFS 可复现部署清单；运行密码仅存储于 Kubernetes Secret。
-- `Jenkinsfile`：Maven、前端构建和 Helm lint 的基础流水线定义。
+- `Jenkinsfile`：Maven、前端构建和 Helm lint 的基础流水线定义；实际 GHCR 推送与自动发布待配置 Jenkins 凭据后启用。
 
 ## 5. 后续实施项
 
 1. 在 Jenkins 中安装所需插件并配置 GitHub、GHCR 与 Kubernetes 凭据。
-2. 完成 Jenkins 中的 Maven 测试、镜像构建、GHCR 推送、Helm 发布及回滚验证。
-3. 部署前端和后端 Helm Release，验证浏览器到数据库的完整请求链路：浏览器 → Ingress → React → Spring Boot → PostgreSQL。
+2. 完成 Jenkins 中的 Maven 测试、Rootless BuildKit 构建、GHCR 推送和自动 Helm 发布。
+3. 验证 Jenkins 自动发布后的回滚流程，并补充流水线运行截图。
 
 ## 6. 证据说明
 

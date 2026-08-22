@@ -1,13 +1,13 @@
 # VM lab override: images are imported into each worker node's containerd.
 frontend:
   image: docker.io/library/assessment-web
-  tag: ae82827
+  tag: 60b3f35
   replicas: 1
   nodeSelector:
     kubernetes.io/hostname: k8s-lg-node2
 backend:
   image: docker.io/library/assessment-api
-  tag: ae82827
+  tag: 60b3f35
   replicas: 1
   nodeSelector:
     kubernetes.io/hostname: k8s-lg-node1
