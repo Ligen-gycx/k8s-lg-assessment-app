@@ -5,7 +5,7 @@
 
 ## 1. 作业目标
 
-使用本机 Multipass 创建三台 Ubuntu 虚拟机，搭建 Kubernetes 集群，并建立 Java 全栈应用的基础交付链路。当前已完成基础设施、Kubernetes 网络、NFS 持久化 PostgreSQL、GitHub SSH 授权、代码入库、第二阶段平台部署，以及第三阶段应用 Helm 发布和端到端数据验收。
+使用本机 Multipass 创建三台 Ubuntu 虚拟机，搭建 Kubernetes 集群，并建立 Java 全栈应用的基础交付链路。当前已完成基础设施、Kubernetes 网络、NFS 持久化 PostgreSQL、GitHub SSH 授权、代码入库、第二阶段平台部署，以及第三阶段应用 Helm 发布、中文化页面和天数池模拟数据的端到端验收。
 
 ## 2. 当前架构
 
@@ -169,9 +169,38 @@ curl -H 'Host: app.192.168.2.6.nip.io' \
 
 验收结果：`assessment-api`、`assessment-web`、`postgresql-0` 均为 `1/1 Running`；业务页面返回 `200 OK`；任务创建、列表读取和 PostgreSQL 持久化数据一致。
 
+### 3.8 页面中文化与美团天数池模拟数据更新
+
+本次将任务看板调整为中文展示，并以“美团天数池”作为业务模拟场景。前端页面名称更新为“美团天数池 / 天数池项目看板”，任务创建区、列表、状态和空说明提示均使用中文。
+
+#### 发布步骤
+
+1. 在 `frontend/src/main.tsx` 将页面文案和状态映射调整为中文：`TODO`、`IN_PROGRESS`、`DONE` 分别显示为“待处理”“进行中”“已完成”。
+2. 新增 Flyway 迁移 `V2__seed_meituan_days_pool_tasks.sql`，将初始数据转换为天数池业务示例，并确保第三条任务在全新数据库中会被补齐。
+3. 以 Git 提交 `4668d89` 构建前端、后端 ARM64 镜像，分别导入 `k8s-lg-node2` 和 `k8s-lg-node1` 的 containerd 镜像缓存。
+4. 更新 `values-vm.yaml` 镜像标签，执行 `helm upgrade assessment-app`；Release 升级为 Revision `5`，状态为 `deployed`。
+5. 使用页面、`GET /api/tasks` 和 PostgreSQL `tasks` 表进行三层只读验收。
+
+#### 模拟任务数据
+
+| 任务 | 说明 | 页面状态 |
+| --- | --- | --- |
+| 天数池基础规则配置 | 配置会员天数余额、领取上限与有效期规则。 | 已完成 |
+| 商家活动天数投放联调 | 模拟活动配置、批量投放和到账通知流程。 | 进行中 |
+| 运营日报与异常监控 | 汇总天数池发放、领取、核销和异常告警数据。 | 待处理 |
+
+#### 验收结果
+
+- 页面入口：`http://192.168.2.6:30080/`，可正常加载中文页面和 3 条天数池任务。
+- 浏览器 DOM 验证页面标题为“天数池项目看板”，任务列表、任务说明和状态均为中文。
+- `GET http://192.168.2.6:30080/api/tasks` 返回上述 3 条中文模拟数据。
+- PostgreSQL 查询 `tasks` 表得到相同的 3 条记录及状态：`DONE`、`IN_PROGRESS`、`TODO`。
+- 前端生产构建 `npm run build`、后端容器构建、Kubernetes 滚动发布均已通过。
+- 代码提交 `4668d89`（功能更新）和 `498e9aa`（部署配置）已推送至 GitHub `main` 分支。
+
 ## 4. 已实现的应用代码
 
-- `frontend/`：React/Vite 任务看板，已通过 `npm run build`。
+- `frontend/`：React/Vite 中文任务看板，模拟美团天数池业务场景，已通过 `npm run build`。
 - `backend/`：Spring Boot 3、Java 21、Maven、Flyway、PostgreSQL。
 - 后端接口：`GET /api/tasks`、`POST /api/tasks`、`/actuator/health`。
 - `frontend/Dockerfile` 与 `backend/Dockerfile`：前后端容器化，其中后端以非 root 用户运行。
