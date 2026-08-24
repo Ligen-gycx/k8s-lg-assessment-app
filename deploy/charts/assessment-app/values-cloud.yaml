@@ -1,0 +1,26 @@
+# Alibaba Cloud Hong Kong ECS override. Images are pulled from GHCR.
+imagePullSecrets:
+  - name: ghcr-pull-config
+
+frontend:
+  image: ghcr.io/ligen-gycx/k8s-lg-assessment-frontend
+  tag: 7ea831c
+  replicas: 1
+  nodeSelector:
+    assessment.ligen.io/role: ingress
+
+backend:
+  image: ghcr.io/ligen-gycx/k8s-lg-assessment-backend
+  tag: 7ea831c
+  replicas: 2
+  nodeSelector:
+    assessment.ligen.io/workload: "true"
+  podAntiAffinity: true
+
+ingress:
+  className: traefik
+  host: app.cloud.k8s.lab
+  allowHostlessFallback: false
+  tls:
+    enabled: true
+    secretName: assessment-cloud-tls

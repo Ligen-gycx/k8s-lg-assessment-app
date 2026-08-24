@@ -4,6 +4,7 @@ frontend:
   pullPolicy: IfNotPresent
   replicas: 2
   nodeSelector: {}
+imagePullSecrets: []
 backend:
   image: ghcr.io/ligen-gycx/k8s-lg-assessment-backend
   tag: latest
@@ -20,6 +21,10 @@ database:
 ingress:
   className: traefik
   host: app.k8s.local
+  allowHostlessFallback: true
+  tls:
+    enabled: false
+    secretName: ""
 resources:
   frontend:
     requests: { cpu: 25m, memory: 64Mi }

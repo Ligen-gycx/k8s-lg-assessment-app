@@ -3,6 +3,9 @@ kind: Deployment
 metadata: { name: assessment-api, namespace: assessment }
 spec:
   replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxSurge: 0, maxUnavailable: 1 }
   selector: { matchLabels: { app: assessment-api } }
   template:
     metadata: { labels: { app: assessment-api } }
@@ -33,9 +36,9 @@ spec:
               valueFrom: { fieldRef: { fieldPath: status.podIP } }
           resources: { requests: { cpu: 100m, memory: 256Mi }, limits: { cpu: 500m, memory: 512Mi } }
           volumeMounts: [{ name: tmp, mountPath: /tmp }]
-          startupProbe: { httpGet: { path: /actuator/health/readiness, port: http }, periodSeconds: 5, failureThreshold: 30 }
-          readinessProbe: { httpGet: { path: /actuator/health/readiness, port: http } }
-          livenessProbe: { httpGet: { path: /actuator/health/liveness, port: http } }
+          startupProbe: { httpGet: { path: /actuator/health/readiness, port: http }, periodSeconds: 5, timeoutSeconds: 5, failureThreshold: 120 }
+          readinessProbe: { httpGet: { path: /actuator/health/readiness, port: http }, timeoutSeconds: 5 }
+          livenessProbe: { httpGet: { path: /actuator/health/liveness, port: http }, timeoutSeconds: 5, failureThreshold: 6 }
           securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
       volumes: [{ name: tmp, emptyDir: {} }]
 ---

@@ -17,6 +17,9 @@ spec:
       labels: { app: assessment-api }
     spec:
       automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
       {{- with .Values.backend.nodeSelector }}
       nodeSelector: {{- toYaml . | nindent 8 }}
       {{- end }}
