@@ -1,6 +1,6 @@
 # Kubernetes 全栈考核作业记录
 
-> 更新日期：2026-08-22  
+> 更新日期：2026-08-24  
 > 项目仓库：[Ligen-gycx/k8s-lg-assessment-app](https://github.com/Ligen-gycx/k8s-lg-assessment-app)
 
 ## 1. 作业目标
@@ -12,16 +12,29 @@
 | 项目 | 当前实现 |
 | --- | --- |
 | 本机 | Apple Silicon Mac，Multipass `1.16.1+mac` |
-| 控制平面 | `k8s-lg-master`，`192.168.2.4` |
-| 工作节点 | `k8s-lg-node1`，`192.168.2.5`；`k8s-lg-node2`，`192.168.2.6` |
+| 控制平面 | `k8s-lg-master-recovery`，`192.168.2.7` |
+| 工作节点 | `k8s-lg-node1`，`192.168.2.5`；`k8s-lg-node2-recovery`，`192.168.2.8` |
 | Kubernetes | `v1.36.4`，containerd `2.2.1`，ARM64 |
 | Pod 网络 | Calico `v3.31.3`，`10.244.0.0/16`，VXLAN，IPIP/BGP 关闭 |
 | 持久化 | 控制平面 NFS Server，静态 NFS PV/PVC |
 | 数据库 | PostgreSQL 17 StatefulSet，`assessment` 命名空间 |
-| Ingress | Traefik v3.3，部署于 `k8s-lg-node2`，NodePort `30080` |
+| Ingress | Traefik v3.3，部署于 `k8s-lg-node2-recovery`，NodePort `30080` |
 | CI | Jenkins LTS JDK 17，部署于 `k8s-lg-node1`，6Gi NFS PVC |
 | 构建服务 | Rootless BuildKit v0.17.3，部署于 `k8s-lg-node1` |
 | 代码 | React/Vite 前端、Spring Boot 3/Java 21 后端、PostgreSQL/Flyway、Helm Chart、Jenkinsfile |
+
+### 2.1 2026-08-24 故障恢复记录
+
+原 `k8s-lg-master` 与 `k8s-lg-node2` 的 QCOW2 元数据在 Multipass 异常进程重叠后受损。为保留考核证据和磁盘数据，未删除原实例：两份原镜像均保留修复前备份，并已通过 `qemu-img check -r all` 修复元数据。旧 `node2` 虽可启动 QEMU，但来宾网络无法恢复，保持 `NotReady` 且不会参与调度。
+
+恢复环境采用新的控制平面和替代工作节点：
+
+- `k8s-lg-master-recovery`：`192.168.2.7`，运行 Kubernetes 控制面与 NFS Server。
+- `k8s-lg-node1`：`192.168.2.5`，保留并运行 PostgreSQL、一个 API 副本和 BuildKit。
+- `k8s-lg-node2-recovery`：`192.168.2.8`，运行入口、前端和另一个 API 副本。
+- 两个可调度工作节点分别标记 `assessment.ligen.io/workload=true`；恢复节点额外标记 `assessment.ligen.io/role=ingress`。
+
+恢复验收结果：PostgreSQL PVC 为 `Bound`、数据库为 `1/1 Running`；`assessment-api` 两个 Endpoint 分别位于 `node1` 与 `node2-recovery`；连续请求 `http://192.168.2.8:30080/api/runtime` 同时命中两个节点。当前可访问入口为 `http://192.168.2.8:30080/`，`GET /api/tasks` 返回三条美团天数池预置模拟数据。
 
 ## 3. 已完成步骤
 

@@ -10,7 +10,7 @@ spec:
   accessModes: [ReadWriteOnce]
   persistentVolumeReclaimPolicy: Retain
   storageClassName: nfs-static
-  nfs: { server: 192.168.2.4, path: /srv/k8s-nfs/postgresql }
+  nfs: { server: 192.168.2.7, path: /srv/k8s-nfs/postgresql }
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -30,10 +30,15 @@ spec:
   template:
     metadata: { labels: { app: postgresql } }
     spec:
+      nodeSelector: { assessment.ligen.io/workload: "true" }
       securityContext: { fsGroup: 999 }
       containers:
         - name: postgresql
           image: docker.m.daocloud.io/library/postgres:17-bookworm
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+            runAsGroup: 999
           ports: [{ name: postgres, containerPort: 5432 }]
           env:
             - { name: POSTGRES_DB, value: assessment }

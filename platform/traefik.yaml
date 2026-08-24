@@ -41,7 +41,7 @@ spec:
     metadata: { labels: { app: traefik } }
     spec:
       serviceAccountName: traefik
-      nodeSelector: { kubernetes.io/hostname: k8s-lg-node2 }
+      nodeSelector: { assessment.ligen.io/role: ingress }
       containers:
         - name: traefik
           image: docker.m.daocloud.io/library/traefik:v3.3

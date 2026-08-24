@@ -4,12 +4,13 @@ frontend:
   tag: 344d71a
   replicas: 1
   nodeSelector:
-    kubernetes.io/hostname: k8s-lg-node2
+    assessment.ligen.io/role: ingress
 backend:
   image: docker.io/library/assessment-api
   tag: 344d71a
   replicas: 2
-  nodeSelector: {}
+  nodeSelector:
+    assessment.ligen.io/workload: "true"
   podAntiAffinity: true
 ingress:
-  host: app.192.168.2.6.nip.io
+  host: app.192.168.2.8.nip.io
