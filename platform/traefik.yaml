@@ -36,6 +36,12 @@ kind: Deployment
 metadata: { name: traefik, namespace: ingress-system }
 spec:
   replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # Required anti-affinity needs a worker slot freed before its replacement starts.
+      maxSurge: 0
+      maxUnavailable: 1
   selector: { matchLabels: { app: traefik } }
   template:
     metadata: { labels: { app: traefik } }
