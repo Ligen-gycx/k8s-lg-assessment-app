@@ -4,6 +4,11 @@ COPY .mvn/settings.xml /root/.m2/settings.xml
 COPY pom.xml .
 RUN mvn -q -DskipTests -Dmaven.wagon.http.connectionTimeout=10000 -Dmaven.wagon.http.readTimeout=60000 dependency:go-offline
 COPY src src
+
+FROM build AS test
+RUN mvn -q -Dmaven.wagon.http.connectionTimeout=10000 -Dmaven.wagon.http.readTimeout=60000 test
+
+FROM test AS package
 RUN mvn -q -DskipTests -Dmaven.wagon.http.connectionTimeout=10000 -Dmaven.wagon.http.readTimeout=60000 package
 
 FROM docker.m.daocloud.io/library/eclipse-temurin:21-jre-jammy

@@ -34,7 +34,7 @@
 
 ### 0.3 已验收的构建、恢复与可视化记录
 
-- Jenkins Job `assessment-cicd` 的 #3 构建为 `SUCCESS`：完成 GitHub `main` 拉取、Maven/Java 21 校验、Vite 构建、Rootless BuildKit 推送 GHCR、Helm 清单渲染与 `kubectl -n assessment apply`，最终健康检查返回 `UP`。
+- Jenkins Job `assessment-cicd` 的 #3 构建为 `SUCCESS`：完成 GitHub `main` 拉取、Rootless BuildKit 推送 GHCR、Helm 清单渲染与 `kubectl -n assessment apply`，最终健康检查返回 `UP`。#3 未独立执行 Maven 测试或前端 lint；该差异已在后续 Jenkinsfile 中修复，等待 Jenkins #4 实际验证后再写为已通过。
 - Jenkins Controller 已做真实重启验证；Job、插件及 `buildctl`、`kubectl`、`helm` 工具仍保留在 `ci/jenkins-home` 的 Bound NFS PVC 中。
 - 数据持久化已做真实重启验证：通过 API 新建 `db-persistence-20260825` 后删除 `postgresql-0`，StatefulSet 自动恢复，任务记录仍可读取，`postgresql-data` PVC 仍为 Bound。
 - Headlamp 已验证只读访问：可列出 Pod，不能读取 Secret；登录凭据是短时 Token，只在本机浏览器输入，未写入仓库、终端证据或飞书文档。完整截图见作业飞书文档的图 1a、1b、1c。
@@ -46,6 +46,17 @@
 三个 `calico-node` 均与另外两个节点建立 BGP 邻居。控制平面的远端 Pod CIDR 分别经 `172.28.248.8`、`172.28.248.9` 的 `tunl0` 转发，路由来源为 `proto bird`，证明当前跨节点使用 IPIP 封装而不是 VXLAN。证据图为作业飞书文档“图 7：Calico BGP mesh 与 IPIP 路由验证”。
 
 固定在两个 Worker 的临时测试 Pod 互 ping 尚未作为本次补充的验收动作执行；现有两个 `assessment-api` 副本已跨 node1/node2 运行，但只作为应用层旁证，不替代固定测试 Pod 的网络连通性测试。
+
+### 0.5 已提交、等待云端应用的修复
+
+以下修复已提交至仓库，但由于 2026-08-25 当前控制平面 SSH 入口不可达，尚未在集群执行或写为已验收：
+
+- Jenkins 新增后端 Maven `test` 与前端 `npm run lint` 的 BuildKit target 阶段；镜像构建阶段依赖测试/lint 阶段，失败即停止推送与发布。
+- 发布方式由 `helm template | kubectl apply` 改为 `HELM_DRIVER=configmap helm upgrade --install --atomic --wait`，保留最多 5 个 Release revision；部署身份仍不具备读取业务 Secret 的权限。
+- Jenkins 与 Headlamp 分别改用 `jenkins.cloud.k8s.lab`、`headlamp.cloud.k8s.lab` 的 HTTPS Ingress；应用、Jenkins、Headlamp 的 TLS Secret 必须在各自命名空间存在后才可应用。
+- Traefik 改为 2 副本，并以强制 Pod 反亲和性分散到两个 Worker；这提高入口可用性，但单控制平面、单 NFS、单 PostgreSQL 的考核环境边界保持不变。
+
+恢复 SSH 后的执行顺序：确认安全组/入口地址 -> 生成或扩展三域名 TLS 证书 -> 应用 Jenkins、Headlamp、Traefik 清单 -> 手工触发 Jenkins #4 -> 验证测试日志、ConfigMap Helm revision、三个 HTTPS 入口和 Traefik 双副本 -> 更新飞书作业结果与截图。
 
 ## 1. 固定基线
 

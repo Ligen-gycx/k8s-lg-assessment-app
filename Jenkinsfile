@@ -8,6 +8,24 @@ node {
     imageTag = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim() + "-ci-${env.BUILD_NUMBER}"
   }
 
+  stage('Test') {
+    sh """set -eux
+      export PATH=/var/jenkins_home/bin:\$PATH
+      buildctl --addr ${buildkit} build \\
+        --frontend dockerfile.v0 \\
+        --local context=backend \\
+        --local dockerfile=backend \\
+        --opt target=test \\
+        --output type=cacheonly
+      buildctl --addr ${buildkit} build \\
+        --frontend dockerfile.v0 \\
+        --local context=frontend \\
+        --local dockerfile=frontend \\
+        --opt target=lint \\
+        --output type=cacheonly
+    """
+  }
+
   stage('Build and push backend') {
     sh """set -eux
       export PATH=/var/jenkins_home/bin:\$PATH
@@ -32,17 +50,18 @@ node {
     """
   }
 
-  stage('Render and deploy manifest') {
+  stage('Helm release deploy') {
     sh """set -eux
       export PATH=/var/jenkins_home/bin:\$PATH
+      export HELM_DRIVER=configmap
       helm lint deploy/charts/assessment-app
-      helm template assessment-app deploy/charts/assessment-app \\
+      helm upgrade --install assessment-app deploy/charts/assessment-app \\
         --namespace assessment \\
+        --create-namespace \\
         -f deploy/charts/assessment-app/values-cloud.yaml \\
         --set frontend.tag=${imageTag} \\
-        --set backend.tag=${imageTag} | kubectl -n assessment apply -f -
-      kubectl -n assessment rollout status deployment/assessment-api --timeout=5m
-      kubectl -n assessment rollout status deployment/assessment-web --timeout=5m
+        --set backend.tag=${imageTag} \\
+        --atomic --wait --timeout 8m --history-max 5
     """
   }
 

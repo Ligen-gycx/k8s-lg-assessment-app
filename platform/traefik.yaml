@@ -35,13 +35,18 @@ apiVersion: apps/v1
 kind: Deployment
 metadata: { name: traefik, namespace: ingress-system }
 spec:
-  replicas: 1
+  replicas: 2
   selector: { matchLabels: { app: traefik } }
   template:
     metadata: { labels: { app: traefik } }
     spec:
       serviceAccountName: traefik
-      nodeSelector: { assessment.ligen.io/role: ingress }
+      nodeSelector: { assessment.ligen.io/workload: "true" }
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector: { matchLabels: { app: traefik } }
+              topologyKey: kubernetes.io/hostname
       containers:
         - name: traefik
           image: docker.m.daocloud.io/library/traefik:v3.3
