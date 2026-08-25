@@ -10,7 +10,7 @@
 
 | 项目 | 当前实现 |
 | --- | --- |
-| Kubernetes | v1.36.4，containerd 2.2.1，Calico 网络正常 |
+| Kubernetes | v1.36.4，containerd 2.2.1；Calico 节点间 BGP mesh + IPIP 已验收 |
 | 控制平面与 NFS | hk-k8s-master，私网 172.28.248.7；NFS 目录 /srv/k8s-nfs/spring-postgresql |
 | 工作节点 | hk-k8s-node1，私网 172.28.248.8；hk-k8s-node2，私网 172.28.248.9 |
 | 当前入口 ECS | hk-k8s-node1，公网入口 8.218.20.209；公网 IP 可能变更，以阿里云控制台为准 |
@@ -38,6 +38,14 @@
 - Jenkins Controller 已做真实重启验证；Job、插件及 `buildctl`、`kubectl`、`helm` 工具仍保留在 `ci/jenkins-home` 的 Bound NFS PVC 中。
 - 数据持久化已做真实重启验证：通过 API 新建 `db-persistence-20260825` 后删除 `postgresql-0`，StatefulSet 自动恢复，任务记录仍可读取，`postgresql-data` PVC 仍为 Bound。
 - Headlamp 已验证只读访问：可列出 Pod，不能读取 Secret；登录凭据是短时 Token，只在本机浏览器输入，未写入仓库、终端证据或飞书文档。完整截图见作业飞书文档的图 1a、1b、1c。
+
+### 0.4 Calico BGP + IPIP 验收记录
+
+2026-08-25 在 `hk-k8s-master` 完成只读验证：Calico 的 `apiserver`、`calico`、`ippools`、`tiers` 均为 `AVAILABLE=True`、`PROGRESSING=False`、`DEGRADED=False`；`default-ipv4-ippool` 为 `10.244.0.0/16`、`ipipMode=Always`、`vxlanMode=Never`、`natOutgoing=true`。`BGPConfiguration/default` 的 ASN 为 `64512`，`nodeToNodeMeshEnabled=true`。
+
+三个 `calico-node` 均与另外两个节点建立 BGP 邻居。控制平面的远端 Pod CIDR 分别经 `172.28.248.8`、`172.28.248.9` 的 `tunl0` 转发，路由来源为 `proto bird`，证明当前跨节点使用 IPIP 封装而不是 VXLAN。证据图为作业飞书文档“图 7：Calico BGP mesh 与 IPIP 路由验证”。
+
+固定在两个 Worker 的临时测试 Pod 互 ping 尚未作为本次补充的验收动作执行；现有两个 `assessment-api` 副本已跨 node1/node2 运行，但只作为应用层旁证，不替代固定测试 Pod 的网络连通性测试。
 
 ## 1. 固定基线
 
@@ -365,6 +373,7 @@ kubectl -n assessment exec statefulset/postgresql -- sh -c \
 - Node、Pod、PVC、Ingress、Service、EndpointSlice、页面和数据库截图。
 - 1-13 项验证输出。
 - Jenkins #3 成功日志、Jenkins NFS PVC/RBAC、PostgreSQL 重启持久化、Headlamp 登录与只读 Dashboard 截图，均已放入作业飞书文档。
+- Calico BGP mesh、IPIP 地址池、BIRD 邻居及 `tunl0` 路由截图，见作业飞书文档图 7。
 - 已知限制：单控制平面、单 NFS、单 PostgreSQL、无备份、无自动故障切换。
 
 ### 8.3 排障顺序
