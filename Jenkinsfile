@@ -10,6 +10,7 @@ node {
 
   stage('Build and push backend') {
     sh """set -eux
+      export PATH=/var/jenkins_home/bin:\$PATH
       buildctl --addr ${buildkit} build \\
         --frontend dockerfile.v0 \\
         --local context=backend \\
@@ -20,6 +21,7 @@ node {
 
   stage('Build and push frontend') {
     sh """set -eux
+      export PATH=/var/jenkins_home/bin:\$PATH
       buildctl --addr ${buildkit} build \\
         --frontend dockerfile.v0 \\
         --local context=frontend \\
@@ -30,6 +32,7 @@ node {
 
   stage('Render and deploy manifest') {
     sh """set -eux
+      export PATH=/var/jenkins_home/bin:\$PATH
       helm lint deploy/charts/assessment-app
       helm template assessment-app deploy/charts/assessment-app \\
         --namespace assessment \\
@@ -43,6 +46,7 @@ node {
 
   stage('Verify') {
     sh '''set -eux
+      export PATH=/var/jenkins_home/bin:$PATH
       kubectl -n assessment get deploy,pod,svc,ingress -o wide
       curl --fail --silent --show-error http://assessment-api.assessment.svc.cluster.local:8080/actuator/health
     '''
