@@ -14,7 +14,7 @@ RUN mvn -q -DskipTests -Dmaven.wagon.http.connectionTimeout=10000 -Dmaven.wagon.
 FROM docker.m.daocloud.io/library/eclipse-temurin:21-jre-jammy
 RUN useradd --system --uid 10001 appuser
 WORKDIR /app
-COPY --from=build /workspace/target/assessment-api-0.1.0.jar app.jar
+COPY --from=package /workspace/target/assessment-api-0.1.0.jar app.jar
 USER 10001
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]
