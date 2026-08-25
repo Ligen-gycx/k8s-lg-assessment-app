@@ -1,23 +1,50 @@
-pipeline {
-  agent any
-  options { timestamps() }
-  stages {
-    stage('Verify') {
-      steps {
-        sh 'docker run --rm -v "$WORKSPACE/backend:/workspace" -w /workspace maven:3.9.11-eclipse-temurin-21 mvn -B verify'
-        sh 'docker run --rm -v "$WORKSPACE/frontend:/workspace" -w /workspace node:22-alpine sh -c "npm install && npm run build"'
-      }
-    }
-    stage('Build images') {
-      steps {
-        sh 'echo "Configure Rootless BuildKit build and GHCR push in Jenkins credentials before enabling this stage."'
-      }
-    }
-    stage('Helm deploy') {
-      steps {
-        sh 'helm lint deploy/charts/assessment-app'
-      }
-    }
+node {
+  def imageTag = ''
+  def registry = 'ghcr.io/ligen-gycx'
+  def buildkit = 'tcp://buildkitd.build.svc.cluster.local:1234'
+
+  stage('Checkout') {
+    checkout scm
+    imageTag = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim() + "-ci-${env.BUILD_NUMBER}"
+  }
+
+  stage('Build and push backend') {
+    sh """set -eux
+      buildctl --addr ${buildkit} build \\
+        --frontend dockerfile.v0 \\
+        --local context=backend \\
+        --local dockerfile=backend \\
+        --output type=image,name=${registry}/k8s-lg-assessment-backend:${imageTag},push=true
+    """
+  }
+
+  stage('Build and push frontend') {
+    sh """set -eux
+      buildctl --addr ${buildkit} build \\
+        --frontend dockerfile.v0 \\
+        --local context=frontend \\
+        --local dockerfile=frontend \\
+        --output type=image,name=${registry}/k8s-lg-assessment-frontend:${imageTag},push=true
+    """
+  }
+
+  stage('Render and deploy manifest') {
+    sh """set -eux
+      helm lint deploy/charts/assessment-app
+      helm template assessment-app deploy/charts/assessment-app \\
+        --namespace assessment \\
+        -f deploy/charts/assessment-app/values-cloud.yaml \\
+        --set frontend.tag=${imageTag} \\
+        --set backend.tag=${imageTag} | kubectl apply -f -
+      kubectl -n assessment rollout status deployment/assessment-api --timeout=5m
+      kubectl -n assessment rollout status deployment/assessment-web --timeout=5m
+    """
+  }
+
+  stage('Verify') {
+    sh '''set -eux
+      kubectl -n assessment get deploy,pod,svc,ingress -o wide
+      curl --fail --silent --show-error http://assessment-api.assessment.svc.cluster.local:8080/actuator/health
+    '''
   }
 }
-
