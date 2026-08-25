@@ -16,10 +16,12 @@
 | 当前入口 ECS | hk-k8s-node1，公网入口 8.218.20.209；公网 IP 可能变更，以阿里云控制台为准 |
 | 域名与 TLS | https://app.cloud.k8s.lab:30443/；Traefik websecure；TLS Secret assessment-cloud-tls |
 | Helm 发布 | Release assessment-app，命名空间 assessment，状态 deployed |
-| 前端 | assessment-web 单副本，位于 node1；GHCR 前端镜像 7ea831c |
-| 后端 | assessment-api 两副本，分别位于 node1/node2；GHCR 后端镜像 7ea831c |
+| 前端 | assessment-web 单副本，位于 node1；由 Jenkins #3 发布的 GHCR 镜像 25ce016-ci-3 |
+| 后端 | assessment-api 两副本，分别位于 node1/node2；由 Jenkins #3 发布的 GHCR 镜像 25ce016-ci-3 |
 | 数据库 | postgresql-0 单副本，位于 node2；postgresql:5432 为 ClusterIP；PVC 为 Bound |
 | 入口服务 | Traefik NodePort：HTTP 30080、HTTPS 30443；业务与数据库仅提供 ClusterIP |
+| Jenkins / BuildKit | Jenkins 2.504.3 LTS（JDK 17）使用 NFS PVC；Jenkins #3 已通过 Rootless BuildKit 推送 GHCR，并经 Helm/kubectl 发布 |
+| Headlamp | v0.45.0 单副本运行于 node2；仅 `view` 只读 RBAC，受控 Token 登录已验证，不保存或展示 Token |
 
 当前数据库 tasks 表由 Flyway 建立，包含 3 条美团天数池初始化任务和 1 条页面联调测试记录。数据库查询证据见 [cloud-postgresql-tasks-terminal.png](.codex-tmp/cloud-postgresql-tasks-terminal.png)。
 
@@ -29,6 +31,13 @@
 - 公网仅应对培训电脑当前公网 IP /32 放行 SSH 和 Traefik NodePort；不得开放 Kubernetes API、etcd、NFS、数据库端口。
 - 应用从 GHCR 拉取镜像，Helm 负责部署，凭据通过 Kubernetes Secret 管理。
 - 浏览器被系统代理接管时，必须为 *.cloud.k8s.lab 和入口 ECS 公网 IP 配置 DIRECT 后再验收页面。
+
+### 0.3 已验收的构建、恢复与可视化记录
+
+- Jenkins Job `assessment-cicd` 的 #3 构建为 `SUCCESS`：完成 GitHub `main` 拉取、Maven/Java 21 校验、Vite 构建、Rootless BuildKit 推送 GHCR、Helm 清单渲染与 `kubectl -n assessment apply`，最终健康检查返回 `UP`。
+- Jenkins Controller 已做真实重启验证；Job、插件及 `buildctl`、`kubectl`、`helm` 工具仍保留在 `ci/jenkins-home` 的 Bound NFS PVC 中。
+- 数据持久化已做真实重启验证：通过 API 新建 `db-persistence-20260825` 后删除 `postgresql-0`，StatefulSet 自动恢复，任务记录仍可读取，`postgresql-data` PVC 仍为 Bound。
+- Headlamp 已验证只读访问：可列出 Pod，不能读取 Secret；登录凭据是短时 Token，只在本机浏览器输入，未写入仓库、终端证据或飞书文档。完整截图见作业飞书文档的图 1a、1b、1c。
 
 ## 1. 固定基线
 
@@ -259,7 +268,7 @@ kubectl auth can-i create namespaces --all-namespaces \
 
 预期结果为 yes、no、no。
 
-构建顺序：Jenkins 拉取源码 -> Maven/Java 21 测试 -> Vite 构建 -> Rootless BuildKit 推送 GHCR -> Helm 发布 -> 等待工作负载 Ready。当前 Jenkinsfile 已包含 Maven 校验、前端构建和 Helm lint；启用自动 GHCR 推送/Helm 发布前必须配置 Jenkins 凭据。
+构建顺序：Jenkins 拉取源码 -> Maven/Java 21 测试 -> Vite 构建 -> Rootless BuildKit 推送 GHCR -> Helm 模板渲染 -> `kubectl -n assessment apply` -> 等待工作负载 Ready。Jenkins 凭据已在集群内受控配置；`assessment-cicd` 的 #3 构建已成功完成上述链路，发布标签为 `25ce016-ci-3`。Jenkins #1、#2 为配置排障记录，不能作为最终成功凭据。
 
 ## 6. Helm 发布天数池应用
 
@@ -279,8 +288,8 @@ helm upgrade --install assessment-app deploy/charts/assessment-app \
 
 | 组件 | 云端关键设置 |
 | --- | --- |
-| assessment-web | GHCR 前端镜像 7ea831c；单副本；节点标签 assessment.ligen.io/role: ingress |
-| assessment-api | GHCR 后端镜像 7ea831c；双副本；两个 Worker 强制反亲和性 |
+| assessment-web | GHCR 前端镜像 25ce016-ci-3；单副本；节点标签 assessment.ligen.io/role: ingress |
+| assessment-api | GHCR 后端镜像 25ce016-ci-3；双副本；两个 Worker 强制反亲和性 |
 | Ingress | traefik；Host app.cloud.k8s.lab；TLS Secret assessment-cloud-tls |
 | 数据库连接 | 后端只访问 postgresql:5432；密码由 Secret/assessment-db 注入 |
 
@@ -355,6 +364,7 @@ kubectl -n assessment exec statefulset/postgresql -- sh -c \
 - Jenkins 构建编号、GHCR 镜像 tag/digest、Helm Release 状态。
 - Node、Pod、PVC、Ingress、Service、EndpointSlice、页面和数据库截图。
 - 1-13 项验证输出。
+- Jenkins #3 成功日志、Jenkins NFS PVC/RBAC、PostgreSQL 重启持久化、Headlamp 登录与只读 Dashboard 截图，均已放入作业飞书文档。
 - 已知限制：单控制平面、单 NFS、单 PostgreSQL、无备份、无自动故障切换。
 
 ### 8.3 排障顺序
