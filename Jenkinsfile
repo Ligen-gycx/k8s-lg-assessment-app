@@ -16,13 +16,13 @@ node {
         --local context=backend \\
         --local dockerfile=backend \\
         --opt target=test \\
-        --output type=cacheonly
+        --output type=tar,dest=/dev/null
       buildctl --addr ${buildkit} build \\
         --frontend dockerfile.v0 \\
         --local context=frontend \\
         --local dockerfile=frontend \\
         --opt target=lint \\
-        --output type=cacheonly
+        --output type=tar,dest=/dev/null
     """
   }
 
