@@ -40,7 +40,7 @@ node {
         --namespace assessment \\
         -f deploy/charts/assessment-app/values-cloud.yaml \\
         --set frontend.tag=${imageTag} \\
-        --set backend.tag=${imageTag} | kubectl apply -f -
+        --set backend.tag=${imageTag} | kubectl -n assessment apply -f -
       kubectl -n assessment rollout status deployment/assessment-api --timeout=5m
       kubectl -n assessment rollout status deployment/assessment-web --timeout=5m
     """
