@@ -11,6 +11,7 @@ node {
   stage('Build and push backend') {
     sh """set -eux
       export PATH=/var/jenkins_home/bin:\$PATH
+      export DOCKER_CONFIG=/var/run/ghcr
       buildctl --addr ${buildkit} build \\
         --frontend dockerfile.v0 \\
         --local context=backend \\
@@ -22,6 +23,7 @@ node {
   stage('Build and push frontend') {
     sh """set -eux
       export PATH=/var/jenkins_home/bin:\$PATH
+      export DOCKER_CONFIG=/var/run/ghcr
       buildctl --addr ${buildkit} build \\
         --frontend dockerfile.v0 \\
         --local context=frontend \\
