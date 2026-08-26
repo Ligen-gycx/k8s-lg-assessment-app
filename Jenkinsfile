@@ -57,7 +57,6 @@ node {
       helm lint deploy/charts/assessment-app
       helm upgrade --install assessment-app deploy/charts/assessment-app \\
         --namespace assessment \\
-        --create-namespace \\
         -f deploy/charts/assessment-app/values-cloud.yaml \\
         --set frontend.tag=${imageTag} \\
         --set backend.tag=${imageTag} \\
